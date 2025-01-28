@@ -5,27 +5,43 @@ from langchain_community.document_loaders import WebBaseLoader, YoutubeLoader, C
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
+from fake_useragent import UserAgent
+import os
+from time import sleep
+
+TIPOS_ARQUIVOS_VALIDOS = [
+    "Site", "Youtube", "Pdf", "Csv", "Txt"
+]
+
+CONFIG_MODELOS = {"Groq": 
+                        {"modelos": ["llama-3.3-70b-versatile", "gemma2-9b-it", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+                         "chat": ChatGroq},
+                  "OpenAI": 
+                        {"modelos": ["gpt-4o-mini", "gpt-4o", "o1-preview", "o1-mini"],
+                         "chat": ChatOpenAI}}
 
 def carrega_arquivo(tipo_arquivo, arquivo):
+    documento = None
+    
     if tipo_arquivo == "Site":
         documento = carrega_site(arquivo)
 
     if tipo_arquivo == "Youtube":
         documento = carrega_youtube(arquivo)
 
-    if tipo_arquivo == "PDF":
+    if tipo_arquivo == "Pdf":
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp:
             temp.write(arquivo.read())
             nome_temp = temp.name
         documento = carrega_pdf(nome_temp)
 
-    if tipo_arquivo == "CSV":
+    if tipo_arquivo == "Csv":
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as temp:
             temp.write(arquivo.read())
             nome_temp = temp.name
         documento = carrega_csv(nome_temp)
 
-    if tipo_arquivo == "TXT":
+    if tipo_arquivo == "Txt":
         with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as temp:
             temp.write(arquivo.read())
             nome_temp = temp.name
@@ -34,9 +50,22 @@ def carrega_arquivo(tipo_arquivo, arquivo):
     return documento
 
 def carrega_site(url):
-    loader = WebBaseLoader(url)
-    lista_documentos = loader.load()
-    documento = "\n".join([doc.page_content for doc in lista_documentos])
+    documento = ""
+    for i in range(5):
+        try:
+            os.environ["USER_AGENT"] = UserAgent().random
+            loader = WebBaseLoader(url, raise_for_status=True)
+            lista_documentos = loader.load()
+            documento = "\n".join([doc.page_content for doc in lista_documentos])
+            break
+        except:
+            st.error(f"Deu ruim no site... pela {i}º vez")
+            sleep(3)
+            
+    if documento == "":
+        st.error("Fiz o que pude e não consegui... fui mlk, tente outro site ou novamente mais tarde")
+        st.stop()
+        
     return documento
 
 def carrega_youtube(video_id):
@@ -63,16 +92,6 @@ def carrega_txt(arquivo):
     documento = "\n".join([doc.page_content for doc in lista_documentos])
     return documento
 
-TIPOS_ARQUIVOS_VALIDOS = [
-    "Site", "Youtube", "Pdf", "Csv", "Txt"
-]
-
-CONFIG_MODELOS = {"Groq": 
-                        {"modelos": ["llama-3.3-70b-versatile", "gemma2-9b-it", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
-                         "chat": ChatGroq},
-                  "OpenAI": 
-                        {"modelos": ["gpt-4o-mini", "gpt-4o", "o1-preview", "o1-mini"],
-                         "chat": ChatOpenAI}}
 
 MEMORIA = ConversationBufferMemory()
 
@@ -160,7 +179,10 @@ def sidebar():
         st.session_state[f"api_key_{provedor}"] = api_key
     
     if st.button("Chamar o sábio supremo do momo", use_container_width=True):
-        carrega_modelo(provedor, modelo, api_key, tipo_arquivo, arquivo)
+        if arquivo is None:
+            st.error("Alimente-me... preciso consumir dados")
+        else:
+            carrega_modelo(provedor, modelo, api_key, tipo_arquivo, arquivo)
     if st.button("Sumir com as evidências", use_container_width=True):
         st.session_state["memoria"] = MEMORIA
 
